@@ -1,0 +1,11 @@
+# secrets — API keys land here at Ticket 2
+.env
+
+# my real resume is PII; only an example version gets committed
+profile/base_resume*.md
+!profile/*.example.md
+
+# Python / OS junk
+.venv/
+__pycache__/
+.DS_Store
