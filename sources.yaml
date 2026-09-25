@@ -18,6 +18,9 @@ sources:
   - name: gitlab
     type: greenhouse
     board_token: gitlab
+  - name: fantom-corporation
+    type: lever
+    company: fantom-corporation
 
 # Title matching — the wide net from Ticket 0's sweep.
 filters:

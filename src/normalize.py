@@ -1,6 +1,6 @@
 import html                                          # for unescaping &lt; &amp; etc.
 import re                                            # for stripping tags
-from datetime import datetime
+from datetime import datetime, timezone
 from src.models import Listing
 
 TAG_RE = re.compile(r"<[^>]+>")                      # matches any HTML tag
@@ -34,4 +34,17 @@ def from_greenhouse(job: dict, company: str) -> Listing:
         description=_clean_html(job.get("content", "")),
         posted_date=_parse_date(job.get("first_published")),
         sources=["greenhouse"],
+    )
+def from_lever(job: dict, company: str) -> Listing:
+    """Map one raw Lever posting onto the common schema."""
+    categories = job.get("categories") or {}              # may be missing entirely
+    created = job.get("createdAt")                        # Unix milliseconds, not seconds
+    return Listing(
+        title=job.get("text", "").strip(),                # 'text', not 'title'
+        company=company,                                  # Lever doesn't return a company name
+        location=(categories.get("location") or "").strip(),
+        url=job.get("hostedUrl", ""),
+        description=_clean_html(job.get("descriptionPlain", "")),   # already plain; clean anyway
+        posted_date=datetime.fromtimestamp(created / 1000, tz=timezone.utc) if created else None,
+        sources=["lever"],
     )

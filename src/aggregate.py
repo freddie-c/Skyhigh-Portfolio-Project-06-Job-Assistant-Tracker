@@ -1,7 +1,7 @@
 import logging
 import yaml
-from src.fetchers import greenhouse
-from src.normalize import from_greenhouse
+from src.fetchers import greenhouse, lever
+from src.normalize import from_greenhouse, from_lever
 from src.models import Listing
 from src.dedupe import dedupe
 
@@ -9,6 +9,7 @@ log = logging.getLogger(__name__)
 
 FETCHERS = {                                          # type -> (fetch fn, normalize fn)
     "greenhouse": (greenhouse.fetch, from_greenhouse),
+    "lever": (lever.fetch, from_lever),                   # new source type, no other changes needed
 }
 
 def load_config(path: str = "sources.yaml") -> dict:
@@ -38,16 +39,17 @@ def collect(config: dict) -> list[Listing]:
 
         fetch_fn, normalize_fn = fetcher
         try:
-            raw_jobs = fetch_fn(source["board_token"])          # network call
+            raw_jobs = fetch_fn(source.get("board_token") or source["company"])   # greenhouse uses board_token, lever uses company
         except Exception as exc:                                # dead source, timeout, 404
             log.warning("Source %s failed (%s) — skipping", name, exc)
             continue                                            # other sources still run
 
         for job in raw_jobs:
             try:
-                if not matches(job.get("title", ""), filters):  # cheap check before parsing
+                listing = normalize_fn(job, name)               # normalize first, into the common shape
+                if not matches(listing.title, filters):         # then filter on a field every source has
                     continue
-                results.append(normalize_fn(job, name))
+                results.append(listing)
             except Exception as exc:                            # one bad record, not a dead run
                 log.warning("Could not normalize a job from %s (%s)", name, exc)
 
