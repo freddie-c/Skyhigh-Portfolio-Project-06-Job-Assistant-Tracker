@@ -1,0 +1,40 @@
+# Which boards to pull from. Adding a company = one entry here, no code changes.
+sources:
+  - name: stripe
+    type: greenhouse
+    board_token: stripe
+  - name: upstart
+    type: greenhouse
+    board_token: upstart
+  - name: vercel
+    type: greenhouse
+    board_token: vercel
+  - name: pslgroup
+    type: greenhouse
+    board_token: pslgroup
+  - name: databricks
+    type: greenhouse
+    board_token: databricks
+  - name: gitlab
+    type: greenhouse
+    board_token: gitlab
+
+# Title matching — the wide net from Ticket 0's sweep.
+filters:
+  include:
+    - infrastructure
+    - devops
+    - reliability
+    - cloud
+  exclude:
+    - manager
+    - staff
+    - principal
+    - director
+    - senior
+    - scientist
+    - analyst
+    - strategy
+    - architect
+    - sales
+    - partner
