@@ -13,3 +13,6 @@ __pycache__/
 # local database — job search data stays off GitHub
 data/
 
+
+# generated packets — contain resume content
+packets/

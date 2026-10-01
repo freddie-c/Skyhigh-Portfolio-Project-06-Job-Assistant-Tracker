@@ -1,5 +1,6 @@
 import sqlite3                                           # stdlib, no server, single file
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from src.models import Listing
 from src.dedupe import _key                              # reuse the dedup identity as the row id
@@ -19,6 +20,7 @@ CREATE TABLE IF NOT EXISTS listings (
     posted_date  TEXT,                                   -- ISO string; SQLite has no date type
     sources      TEXT,                                   -- comma-joined source names
     status       TEXT NOT NULL DEFAULT 'Saved',          -- survives re-aggregation
+    packet_path  TEXT,                                   -- survives re-aggregation
     first_seen   TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -40,8 +42,21 @@ def connect():
 def row_id(listing: Listing) -> str:
     return "|".join(_key(listing))                        # same identity dedupe uses
 
+def row_to_listing(row: dict) -> Listing:
+    """Rebuild a Listing from a stored row so the tailoring engine can consume it."""
+    posted = row.get("posted_date")
+    return Listing(
+        title=row["title"],
+        company=row["company"],
+        location=row.get("location") or "",
+        url=row.get("url") or "",
+        description=row.get("description") or "",
+        posted_date=datetime.fromisoformat(posted) if posted else None,
+        sources=(row.get("sources") or "").split(",") if row.get("sources") else [],
+    )
+
 def upsert(conn, listing: Listing) -> None:
-    """Insert a listing, or refresh its fields — but never overwrite status."""
+    """Insert a listing, or refresh its fields — but never overwrite status or packet_path."""
     conn.execute(
         """
         INSERT INTO listings (id, title, company, location, url, description, posted_date, sources)
@@ -77,6 +92,14 @@ def all_rows() -> list[dict]:
     with connect() as conn:
         return [dict(r) for r in conn.execute("SELECT * FROM listings ORDER BY company, title")]
 
+def get_row(listing_id: str) -> dict | None:
+    """Fetch one row by id — used when generating a packet for a chosen listing."""
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM listings WHERE id = ?", (listing_id,)    # parameterized
+        ).fetchone()
+        return dict(row) if row else None
+
 def set_status(listing_id: str, status: str) -> None:
     if status not in STATUSES:                            # validate before it reaches SQL
         raise ValueError(f"Unknown status: {status}")
@@ -84,4 +107,12 @@ def set_status(listing_id: str, status: str) -> None:
         conn.execute(
             "UPDATE listings SET status = ?, updated_at = datetime('now') WHERE id = ?",
             (status, listing_id),                         # parameterized
+        )
+
+def record_packet(listing_id: str, path: str) -> None:
+    """Record that a review packet was generated, so the tracker reflects the draft."""
+    with connect() as conn:
+        conn.execute(
+            "UPDATE listings SET packet_path = ?, updated_at = datetime('now') WHERE id = ?",
+            (path, listing_id),                           # parameterized
         )
