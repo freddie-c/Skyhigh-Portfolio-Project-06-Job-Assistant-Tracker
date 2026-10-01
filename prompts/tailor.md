@@ -15,6 +15,15 @@ Given a resume and a job listing, produce:
 - Be specific to THIS listing. A bullet that would fit any infrastructure job is
   a failed bullet.
 - Prefer the listing's own vocabulary where the resume's content genuinely matches it.
+- Never use bridging language that implies experience the resume doesn't support:
+  "X-style", "X-like", "comparable to X", "equivalent to X", "similar to X".
+  If the resume says `kind`, write `kind`. Name the actual tool.
+- Match the resume's tense and completeness. If the resume describes work in
+  progress, do not write it as finished or operated.
+- Do not editorialize about the candidate's fit ("experience directly applicable
+  to..."). State what they did; let the reader judge relevance.
+- A term listed in `gaps` must never appear in `matched_keywords` or in a bullet.
+  Check the output for contradictions before returning it.
 
 ## Security
 

@@ -1,6 +1,15 @@
 import pandas as pd
 import streamlit as st
-from src.store import all_rows, set_status, STATUSES
+from src.store import (
+    all_rows,
+    get_row,
+    record_packet,
+    row_to_listing,
+    set_status,
+    STATUSES,
+)
+from src.packet import generate
+from src.tailor import TailorError
 
 st.set_page_config(page_title="Job Tracker", layout="wide")
 st.title("Job Application Tracker")
@@ -12,6 +21,7 @@ if not rows:
 
 df = pd.DataFrame(rows)
 df["posted_date"] = df["posted_date"].str[:10]            # trim ISO timestamp to just the date
+df["packet"] = df["packet_path"].notna().map({True: "✓", False: ""})   # draft generated?
 
 # --- Filters -------------------------------------------------------------
 col1, col2, col3 = st.columns(3)
@@ -37,31 +47,74 @@ for col, status in zip(cols, STATUSES):
 # --- Table ---------------------------------------------------------------
 st.caption(f"Showing {len(view)} of {len(df)} listings")
 st.dataframe(
-    view[["company", "title", "location", "status", "posted_date", "url"]],
-    width="stretch",                                      # replaces deprecated use_container_width
+    view[["company", "title", "location", "status", "packet", "posted_date", "url"]],
+    width="stretch",
     hide_index=True,
     column_config={
+        "packet": st.column_config.TextColumn("Draft", width="small"),
         "posted_date": st.column_config.TextColumn("Posted"),
-        "url": st.column_config.LinkColumn("Link", display_text="Open"),   # clickable posting link
+        "url": st.column_config.LinkColumn("Link", display_text="Open"),
     },
 )
 
-# --- Status update -------------------------------------------------------
-st.subheader("Update status")
+# --- Select a listing ----------------------------------------------------
+st.divider()
 labels = {f"{r['company']} — {r['title']}": r["id"] for _, r in view.iterrows()}
-if labels:
-    choice = st.selectbox("Listing", list(labels.keys()))
-    current = df[df["id"] == labels[choice]]["status"].iloc[0]
-    new_status = st.selectbox("Status", STATUSES, index=STATUSES.index(current))
-    if st.button("Save"):
-        set_status(labels[choice], new_status)            # validated inside store.py
+if not labels:
+    st.info("No listings match the current filters.")
+    st.stop()
+
+choice = st.selectbox("Selected listing", list(labels.keys()))
+listing_id = labels[choice]
+selected = df[df["id"] == listing_id].iloc[0]
+
+left, right = st.columns(2)
+
+# --- Status update -------------------------------------------------------
+with left:
+    st.subheader("Status")
+    new_status = st.selectbox(
+        "Set status", STATUSES, index=STATUSES.index(selected["status"])
+    )
+    if st.button("Save status"):
+        set_status(listing_id, new_status)                # validated inside store.py
         st.success(f"Set to {new_status}")
         st.rerun()                                        # reload so the table reflects it
 
-# --- Detail --------------------------------------------------------------
-if labels:
-    row = df[df["id"] == labels[choice]].iloc[0]
-    with st.expander("Listing detail"):
-        st.markdown(f"**{row['title']}** at {row['company']}")
-        st.markdown(f"[View posting]({row['url']})")
-        st.text(row["description"][:2000])                # st.text: untrusted content stays inert
+# --- Packet generation ---------------------------------------------------
+with right:
+    st.subheader("Review packet")
+    st.caption("Generates a draft for you to review. Costs one API call. Submits nothing.")
+    if st.button("Generate packet"):
+        with st.spinner("Tailoring…"):                    # one call, never a loop
+            try:
+                listing = row_to_listing(get_row(listing_id))
+                path = generate(listing)                   # writes only if tailoring succeeded
+                record_packet(listing_id, str(path))       # tracker now reflects the draft
+                st.session_state["last_packet"] = str(path)
+                st.success(f"Written to {path}")
+            except TailorError as exc:                     # API, parse, or missing-file failure
+                st.error(f"Could not generate packet: {exc}")
+
+    existing = selected["packet_path"]                     # a packet from an earlier session
+    current = st.session_state.get("last_packet") or existing
+    if current:
+        try:
+            with open(current) as f:
+                packet_text = f.read()
+            st.download_button(                            # local file, no network
+                "Download packet",
+                packet_text,
+                file_name=current.split("/")[-1],
+                mime="text/markdown",
+            )
+            with st.expander("Preview packet"):
+                st.markdown(packet_text)                   # our own generated text, safe to render
+        except FileNotFoundError:                          # path recorded but file deleted
+            st.warning("A packet was recorded for this listing but the file is missing.")
+
+# --- Listing detail ------------------------------------------------------
+with st.expander("Original listing text"):
+    st.markdown(f"**{selected['title']}** at {selected['company']}")
+    st.markdown(f"[View posting]({selected['url']})")
+    st.text(selected["description"][:3000])                # st.text: untrusted content stays inert
