@@ -96,7 +96,9 @@ with right:
             except TailorError as exc:                     # API, parse, or missing-file failure
                 st.error(f"Could not generate packet: {exc}")
 
-    existing = selected["packet_path"]                     # a packet from an earlier session
+    existing = selected["packet_path"]                     # may be NaN when the column has nulls
+    if pd.isna(existing):                                  # NaN is truthy — check it explicitly
+        existing = None
     current = st.session_state.get("last_packet") or existing
     if current:
         try:
@@ -105,7 +107,7 @@ with right:
             st.download_button(                            # local file, no network
                 "Download packet",
                 packet_text,
-                file_name=current.split("/")[-1],
+                file_name=str(current).split("/")[-1],
                 mime="text/markdown",
             )
             with st.expander("Preview packet"):
