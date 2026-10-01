@@ -9,3 +9,7 @@ profile/base_resume*.md
 .venv/
 __pycache__/
 .DS_Store
+
+# local database — job search data stays off GitHub
+data/
+
